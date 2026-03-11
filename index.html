@@ -3,19 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IAchei o Risco</title>
+    <title>Link Up - Auditoria Global</title>
     <style>
         body { font-family: 'Segoe UI', sans-serif; text-align: center; background: #121212; color: white; padding: 20px; }
         #container { max-width: 500px; margin: auto; }
-        .box-video { position: relative; width: 100%; border-radius: 15px; overflow: hidden; border: 3px solid #007bff; background: #000; margin-bottom: 10px; }
+        .box-video { position: relative; width: 100%; border-radius: 15px; overflow: hidden; border: 3px solid #007bff; background: #000; margin-bottom: 10px; min-height: 300px; display: flex; align-items: center; justify-content: center; }
         video, canvas { width: 100%; display: block; }
         .btn { width: 100%; padding: 15px; margin: 10px 0; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.3s; }
         #btn-foto { background: #007bff; color: white; }
         #btn-whats { background: #25D366; color: white; display: none; }
         input { width: 90%; padding: 12px; margin: 5px 0; border-radius: 5px; border: none; font-size: 16px; text-align: center; background: #222; color: white; }
-        #status { color: #ffc107; margin: 15px 0; font-weight: bold; height: 20px; }
+        #status { color: #ffc107; margin: 15px 0; font-weight: bold; }
         .info-uso { font-size: 14px; color: #aaa; background: #1e1e1e; padding: 10px; border-radius: 8px; margin-bottom: 10px; border: 1px solid #333; }
         #setup-key { background: #1e1e1e; padding: 15px; border-radius: 10px; border: 1px dashed #007bff; margin-bottom: 20px; }
+        .btn-reset { background: none; color: #555; border: none; font-size: 11px; text-decoration: underline; cursor: pointer; margin-top: 15px; }
     </style>
 </head>
 <body>
@@ -25,50 +26,47 @@
     <p style="font-size: 12px; margin-top: 0; color: #888;">Perito Digital de Segurança Industrial</p>
 
     <div id="setup-key">
-        <p style="font-size: 13px; margin-bottom: 10px;">Configuração Inicial Obrigatória:</p>
-        <input type="password" id="input-key" placeholder="Cole sua API Key do Google aqui">
-        <button class="btn" onclick="salvarChave()" style="background: #444; padding: 10px; font-size: 14px;">SALVAR CHAVE NESTE APARELHO</button>
+        <p style="font-size: 13px; margin-bottom: 10px;"><b>Configuração de Ativação:</b></p>
+        <input type="password" id="input-key" placeholder="Cole sua Chave API aqui">
+        <button class="btn" onclick="salvarChave()" style="background: #007bff; padding: 10px; font-size: 14px;">ATIVAR APARELHO</button>
     </div>
 
     <div class="info-uso">
-        📅 Data: <span id="data-hoje">--/--/----</span><br>
-        📊 Uso Gratuito: <b><span id="uso-atual">0</span> / 1499</b>
+        📅 Data: <span id="data-hoje">--/--/----</span> | 📊 Uso: <b><span id="uso-atual">0</span> / 1499</b>
     </div>
 
     <div class="box-video">
-        <video id="video" autoplay playsinline></video>
+        <video id="video" autoplay playsinline muted></video>
         <canvas id="canvas" style="display:none;"></canvas>
+        <div id="msg-camera" style="position: absolute; color: #555; font-size: 12px;">Carregando Câmera...</div>
     </div>
 
-    <div id="status">Aguardando câmera...</div>
+    <div id="status">Aguardando...</div>
 
     <button id="btn-foto" class="btn" onclick="analisar()">ANALISAR RISCO AGORA</button>
 
-    <input type="tel" id="telefone" placeholder="WhatsApp para Laudo (Ex: 551299...)">
-    <button id="btn-whats" class="btn" onclick="enviarWhatsApp()">ENVIAR RELATÓRIO VIA WHATSAPP</button>
+    <input type="tel" id="telefone" placeholder="WhatsApp (Ex: 551299...)">
+    <button id="btn-whats" class="btn" onclick="enviarWhatsApp()">ENVIAR LAUDO NO WHATSAPP</button>
+   
+    <button class="btn-reset" onclick="resetarTudo()">🔄 Trocar Chave API / Resetar App</button>
 </div>
 
 <script type="module">
     import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
 
-    // --- CONFIGURAÇÃO MESTRE DO GUSTAVO ---
     const LIMITE_MAXIMO = 1499;
     const hoje = new Date().toLocaleDateString('pt-BR');
     document.getElementById('data-hoje').innerText = hoje;
 
-    // Lógica de Persistência e Reset Diário
+    // Gerenciamento de saldo
     let dados = JSON.parse(localStorage.getItem('auditoria_stats')) || { data: hoje, contagem: 0 };
-
-    if (dados.data !== hoje) {
-        dados = { data: hoje, contagem: 0 };
-        localStorage.setItem('auditoria_stats', JSON.stringify(dados));
-    }
-
+    if (dados.data !== hoje) { dados = { data: hoje, contagem: 0 }; localStorage.setItem('auditoria_stats', JSON.stringify(dados)); }
     document.getElementById('uso-atual').innerText = dados.contagem;
-
-    // Oculta área de chave se já estiver configurado
+   
+    // Controle de exibição da chave
     if(localStorage.getItem('gemini_key')) {
         document.getElementById('setup-key').style.display = 'none';
+        document.getElementById('status').innerText = "Sistema Pronto.";
     }
 
     const video = document.getElementById('video');
@@ -77,60 +75,50 @@
     const btnWhats = document.getElementById('btn-whats');
     let relatorioFinal = "";
 
-    // Inicia Câmera
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-        .then(stream => {
-            video.srcObject = stream;
-            status.innerText = "Câmera Ativa. Aponte para o risco.";
-        })
-        .catch(err => { status.innerText = "Erro: Ative a câmera nas permissões!"; });
-
-    async function analisar() {
-        // 1. TRAVA MESTRE (Corte em 1499)
-        if (dados.contagem >= LIMITE_MAXIMO) {
-            alert("SISTEMA TRAVADO: Você atingiu o limite máximo de 1499 análises gratuitas hoje. O saldo reinicia amanhã!");
-            return;
-        }
-
-        const API_KEY = localStorage.getItem('gemini_key');
-        if(!API_KEY) {
-            alert("Atenção: Você precisa salvar sua API Key primeiro!");
-            return;
-        }
-
-        status.innerText = "IA Analisando ambiente...";
-        const genAI = new GoogleGenerativeAI(API_KEY);
-
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0);
-        const imageData = canvas.toDataURL("image/jpeg", 0.7).split(',')[1];
-
+    // Ligar câmera imediatamente
+    async function ligarCamera() {
         try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+            video.srcObject = stream;
+            document.getElementById('msg-camera').style.display = 'none';
+        } catch (err) {
+            status.innerText = "Erro: Ative a câmera no navegador!";
+        }
+    }
+    ligarCamera();
+
+    window.salvarChave = function() {
+        const key = document.getElementById('input-key').value.trim();
+        if(key) {
+            localStorage.setItem('gemini_key', key);
+            document.getElementById('setup-key').style.display = 'none';
+            status.innerText = "Aparelho Ativado!";
+            alert("Ativado com sucesso!");
+        }
+    };
+
+    window.analisar = async function() {
+        const API_KEY = localStorage.getItem('gemini_key');
+        if(!API_KEY) { alert("Ative a chave primeiro!"); return; }
+        if (dados.contagem >= LIMITE_MAXIMO) { alert("Limite diário atingido!"); return; }
+
+        status.innerText = "IA Analisando Risco...";
+        try {
+            const genAI = new GoogleGenerativeAI(API_KEY);
             const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0);
+            const imageData = canvas.toDataURL("image/jpeg", 0.7).split(',')[1];
+
+            const prompt = "Aja como Perito de Segurança Industrial. Analise o risco na imagem. Responda em Português: 📍 LOCAL: , ⚠️ RISCO: , ✅ CORREÇÃO: , ⚖️ NORMA: ";
+            const result = await model.generateContent([prompt, { inlineData: { data: imageData, mimeType: "image/jpeg" } }]);
            
-            // Prompt de Perito Sênior
-            const prompt = `Aja como um Perito em Segurança do Trabalho. Analise o risco principal na imagem.
-            Responda em Português seguindo este padrão:
-            📍 LOCAL: (Onde está o risco)
-            ⚠️ RISCO: (Tipo de perigo)
-            ✅ CORREÇÃO: (O que fazer)
-            ⚖️ NORMA: (NR correspondente e item)`;
-
-            const result = await model.generateContent([
-                prompt,
-                { inlineData: { data: imageData, mimeType: "image/jpeg" } }
-            ]);
-
             relatorioFinal = result.response.text();
 
-            // SUCESSO: Atualiza contador
-            dados.contagem++;
-            localStorage.setItem('auditoria_stats', JSON.stringify(dados));
-            document.getElementById('uso-atual').innerText = dados.contagem;
-
-            // Interface Visual de Captura
+            // Desenhar o X vermelho na foto capturada
             video.style.display = "none";
             canvas.style.display = "block";
             ctx.strokeStyle = "red"; ctx.lineWidth = 15; ctx.beginPath();
@@ -138,33 +126,33 @@
             ctx.moveTo(canvas.width/2+60, canvas.height/2-60); ctx.lineTo(canvas.width/2-60, canvas.height/2+60);
             ctx.stroke();
 
+            // Atualizar contador
+            dados.contagem++;
+            localStorage.setItem('auditoria_stats', JSON.stringify(dados));
+            document.getElementById('uso-atual').innerText = dados.contagem;
+
             status.innerText = "Análise Concluída!";
             btnWhats.style.display = "block";
-
-        } catch (error) {
-            console.error(error);
-            status.innerText = "Erro na IA. Verifique sua chave.";
-        }
-    }
-
-    // Funções Globais
-    window.analisar = analisar;
-    window.salvarChave = function() {
-        const key = document.getElementById('input-key').value.trim();
-        if(key) {
-            localStorage.setItem('gemini_key', key);
-            alert("Chave salva com segurança! O sistema está pronto.");
-            location.reload();
-        } else {
-            alert("Por favor, insira uma chave válida.");
+        } catch (e) {
+            status.innerText = "Erro na Chave API!";
+            console.error(e);
         }
     };
+
+    window.resetarTudo = function() {
+        if(confirm("Deseja trocar a chave ou resetar o app?")) {
+            localStorage.clear();
+            location.reload();
+        }
+    };
+
     window.enviarWhatsApp = function() {
         let num = document.getElementById('telefone').value;
-        if(!num) { alert("Digite o número do WhatsApp!"); return; }
-        const link = `https://wa.me/${num}?text=${encodeURIComponent("*LAUDO DE SEGURANÇA LINK UP*\n\n" + relatorioFinal)}`;
-        window.open(link, '_blank');
+        if(!num) { alert("Digite o número!"); return; }
+        window.open(`https://wa.me/${num}?text=${encodeURIComponent("*LAUDO LINK UP*\n\n" + relatorioFinal)}`, '_blank');
     };
 </script>
 </body>
-</html> 
+</html>
+
+ 
