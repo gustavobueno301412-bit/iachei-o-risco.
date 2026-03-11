@@ -5,143 +5,124 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>IAchei o Risco</title>
     <style>
-        body { font-family: sans-serif; text-align: center; background: #121212; color: white; padding: 15px; margin: 0; }
-        .box-video { position: relative; width: 100%; border-radius: 15px; overflow: hidden; border: 3px solid #007bff; background: #000; margin-bottom: 10px; min-height: 300px; }
-        video, canvas { width: 100%; display: block; }
-        .btn { width: 100%; padding: 16px; margin: 8px 0; border: none; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; }
-        #btn-foto { background: #007bff; color: white; }
-        #btn-whats { background: #25D366; color: white; display: none; }
-        input { width: 90%; padding: 12px; margin: 5px 0; border-radius: 8px; border: none; background: #222; color: white; text-align: center; }
-        #status { color: #ffc107; margin: 10px 0; font-weight: bold; }
-        .info-uso { font-size: 13px; color: #aaa; background: #1e1e1e; padding: 10px; border-radius: 8px; margin-bottom: 10px; }
-        #setup-key { background: #1e1e1e; padding: 20px; border-radius: 15px; border: 1px dashed #007bff; margin-bottom: 15px; }
+        :root { --blue: #007bff; --green: #25D366; --bg: #121212; --card: #1e1e1e; }
+        body { font-family: sans-serif; background: var(--bg); color: white; text-align: center; padding: 15px; margin: 0; }
+        .card { background: var(--card); padding: 15px; border-radius: 15px; border: 1px solid #333; margin-bottom: 15px; }
+        input { width: 90%; padding: 12px; border-radius: 8px; margin-bottom: 10px; background: #000; color: #fff; border: 1px solid #444; }
+        .box-camera { width: 100%; border-radius: 15px; overflow: hidden; border: 3px solid var(--blue); background: #000; height: 350px; }
+        video, canvas { width: 100%; height: 100%; object-fit: cover; }
+        .btn { width: 100%; padding: 18px; border: none; border-radius: 12px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        .btn-analisar { background: var(--blue); color: white; }
+        .btn-whats { background: var(--green); color: white; display: none; }
+        #status { color: #ffc107; font-weight: bold; margin: 15px 0; }
+        #relatorio { background: white; color: #333; padding: 20px; border-radius: 12px; text-align: left; display: none; margin-top: 20px; border-left: 8px solid var(--blue); }
     </style>
 </head>
 <body>
 
-<div id="container">
-    <h2 style="color: #007bff;">🛡️ IAchei o Risco</h2>
+    <h2 style="color:var(--blue);">🛡️ IAchei o Risco</h2>
    
-    <div id="setup-key">
-        <input type="password" id="input-key" placeholder="Cole sua Chave API do Gemini">
-        <button class="btn" onclick="salvarChave()" style="background: #28a745; color: white; padding: 10px;">ATIVAR SISTEMA</button>
+    <div class="card">
+        <label style="font-size: 12px; color: #888;">CHAVE API GEMINI:</label>
+        <input type="password" id="api-key" placeholder="Cole sua Chave API aqui">
+       
+        <label style="font-size: 12px; color: #888;">NÚMERO DO WHATSAPP (COM DDD):</label>
+        <input type="tel" id="zap-num" placeholder="Ex: 129XXXXXXXX">
     </div>
 
-    <div class="info-uso">
-        📅 11/03/2026 | 📊 Consultas: <b><span id="uso-atual">0</span></b>
-    </div>
+    <div id="status">Aguardando Câmera...</div>
 
-    <div class="box-video">
+    <div class="box-camera">
         <video id="video" autoplay playsinline muted></video>
         <canvas id="canvas" style="display:none;"></canvas>
     </div>
 
-    <div id="status">Câmera pronta para auditoria</div>
-    <button id="btn-foto" class="btn" onclick="analisar()">ANALISAR RISCO AGORA</button>
+    <button class="btn btn-analisar" onclick="executarAuditoria()">AUDITAR RISCO E GERAR LAUDO</button>
 
-    <input type="tel" id="telefone" placeholder="WhatsApp (Ex: 551299...)">
-    <button id="btn-whats" class="btn" onclick="enviarWhatsApp()">ENVIAR LAUDO VIA WHATSAPP</button>
-   
-    <button onclick="resetar()" style="background:none; color:#555; border:none; text-decoration:underline; font-size:11px; cursor:pointer; margin-top:15px;">🔄 Configurar Nova Chave</button>
-</div>
+    <div id="relatorio">
+        <h3 style="margin:0; color:var(--blue);">📋 LAUDO TÉCNICO DE SEGURANÇA</h3>
+        <p id="conteudo-laudo" style="white-space: pre-wrap;"></p>
+    </div>
 
-<script type="module">
-    import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
+    <button id="btn-whats" class="btn btn-whats" onclick="enviarRelatorio()">ENVIAR VIA WHATSAPP</button>
 
-    let contagem = localStorage.getItem('contagem') || 0;
-    document.getElementById('uso-atual').innerText = contagem;
-   
-    if(localStorage.getItem('chave_linkup')) {
-        document.getElementById('setup-key').style.display = 'none';
-    }
-
+<script>
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
     const status = document.getElementById('status');
-    let laudoFinal = "";
+    const relatorio = document.getElementById('relatorio');
+    const conteudo = document.getElementById('conteudo-laudo');
+    const inputKey = document.getElementById('api-key');
+    const inputZap = document.getElementById('zap-num');
+    let laudoGlobal = "";
 
-    // Iniciar Câmera
+    // Recupera dados salvos
+    if(localStorage.getItem('linkup_key')) inputKey.value = localStorage.getItem('linkup_key');
+    if(localStorage.getItem('linkup_zap')) inputZap.value = localStorage.getItem('linkup_zap');
+
     navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-        .then(s => video.srcObject = s)
-        .catch(() => status.innerText = "Erro: Permita o acesso à câmera!");
+        .then(stream => { video.srcObject = stream; status.innerText = "✅ Sistema Pronto"; })
+        .catch(() => { status.innerText = "❌ Erro: Ative a câmera."; });
 
-    window.salvarChave = () => {
-        const k = document.getElementById('input-key').value.trim();
-        if(k) {
-            localStorage.setItem('chave_linkup', k);
-            location.reload();
-        } else {
-            alert("Por favor, insira uma chave válida.");
-        }
-    };
-
-    window.analisar = async () => {
-        const key = localStorage.getItem('chave_linkup');
-        if(!key) { alert("Configure a Chave API primeiro!"); return; }
-
-        status.innerText = "🔍 PROCESSANDO IMAGEM...";
+    async function executarAuditoria() {
+        const key = inputKey.value.trim();
+        if(!key) { alert("Insira a chave API!"); return; }
        
-        try {
-            const genAI = new GoogleGenerativeAI(key);
-            const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        localStorage.setItem('linkup_key', key);
+        localStorage.setItem('linkup_zap', inputZap.value);
 
-            // Capturar frame do vídeo
+        status.innerText = "🔍 ANALISANDO IMAGEM...";
+        relatorio.style.display = "none";
+        document.getElementById('btn-whats').style.display = "none";
+
+        try {
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             const ctx = canvas.getContext('2d');
             ctx.drawImage(video, 0, 0);
+            const imgBase64 = canvas.toDataURL("image/jpeg", 0.3).split(',')[1];
+
+            // Endereço oficial corrigido
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`;
+
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{
+                        parts: [
+                            { text: "Aja como Auditor de Segurança. Identifique na imagem: 1. LOCAL, 2. RISCO, 3. NR VIOLADA (Qualquer NR aplicável), 4. MEDIDA CORRETIVA TÉCNICA (O que fazer para resolver). Seja muito direto." },
+                            { inlineData: { mimeType: "image/jpeg", data: imgBase64 } }
+                        ]
+                    }]
+                })
+            });
+
+            const data = await response.json();
            
-            // Converter para Base64 (JPEG com qualidade média para velocidade)
-            const imgData = canvas.toDataURL("image/jpeg", 0.6).split(',')[1];
+            if (data.candidates && data.candidates[0].content.parts[0].text) {
+                laudoGlobal = data.candidates[0].content.parts[0].text;
+                conteudo.innerText = laudoGlobal;
+                status.innerText = "✅ AUDITORIA CONCLUÍDA";
+                relatorio.style.display = "block";
+                document.getElementById('btn-whats').style.display = "block";
+            } else {
+                alert("Erro: Verifique sua chave API ou o limite do Google.");
+            }
 
-            status.innerText = "🤖 IA ANALISANDO NORMAS...";
-
-            const prompt = "Aja como um engenheiro de segurança do trabalho e perito industrial. Analise esta imagem e forneça um laudo curto com: 1. LOCAL, 2. RISCO IDENTIFICADO, 3. NORMA REGULAMENTADORA (Ex: NR-10, NR-12, NR-35). Seja direto.";
-           
-            const result = await model.generateContent([
-                prompt,
-                { inlineData: { data: imgData, mimeType: "image/jpeg" } }
-            ]);
-           
-            // CORREÇÃO AQUI: await e parênteses ()
-            laudoFinal = await result.response.text();
-
-            // Efeito visual de análise concluída
-            video.style.display = "none";
-            canvas.style.display = "block";
-            ctx.strokeStyle = "red"; ctx.lineWidth = 10; ctx.beginPath();
-            ctx.moveTo(10, 10); ctx.lineTo(100, 100);
-            ctx.moveTo(100, 10); ctx.lineTo(10, 100); // Marcação simples no canto
-            ctx.stroke();
-
-            contagem++;
-            localStorage.setItem('contagem', contagem);
-            document.getElementById('uso-atual').innerText = contagem;
-
-            status.innerText = "✅ ANÁLISE CONCLUÍDA!";
-            document.getElementById('btn-whats').style.display = "block";
-           
         } catch (e) {
-            status.innerText = "❌ ERRO NA API";
-            console.error("Erro detalhado:", e);
-            alert("Verifique se sua chave API está correta ou se o limite foi atingido.");
+            status.innerText = "❌ ERRO DE CONEXÃO (USE O GITHUB)";
+            console.error(e);
         }
-    };
+    }
 
-    window.resetar = () => {
-        if(confirm("Deseja trocar a chave da API?")) {
-            localStorage.removeItem('chave_linkup');
-            location.reload();
-        }
-    };
-
-    window.enviarWhatsApp = () => {
-        let n = document.getElementById('telefone').value.replace(/\D/g, '');
-        if(!n) { alert("Digite o número do WhatsApp"); return; }
+    function enviarRelatorio() {
+        const tel = inputZap.value.replace(/\D/g, '');
+        if(!tel) { alert("Informe o número do WhatsApp!"); return; }
        
-        const mensagem = `*AUDITORIA LINK UP - RELATÓRIO*\n\n${laudoFinal}`;
-        window.open(`https://wa.me/${n}?text=${encodeURIComponent(mensagem)}`, '_blank');
-    };
+        const mensagem = `*🛡️ LINK UP AUDITOR - RELATÓRIO TÉCNICO*\n\n${laudoGlobal}`;
+        window.open(`https://wa.me/${tel}?text=${encodeURIComponent(mensagem)}`, '_blank');
+    }
 </script>
 </body>
 </html>
